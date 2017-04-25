@@ -11,6 +11,7 @@ import edu.wpi.first.wpilibj.RobotDrive;
 import edu.wpi.first.wpilibj.Spark;
 import edu.wpi.first.wpilibj.Talon;
 import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 /**
@@ -21,18 +22,21 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
  * directory.
  */
 public class Robot extends IterativeRobot {
-	/*final String defaultAuto = "Default";
-	final String customAuto = "My Auto";
+	final String autoNameDefault = "Default";
+	final String autoNameLowBar = "Low Bar";
+	final String autoNameMoatRampart = "Moat or Rampart";
+	final String autoNameScore = "Low Bar Score";
 	String autoSelected;
-	SendableChooser<String> chooser = new SendableChooser<>();*/
+	SendableChooser<String> chooser = new SendableChooser<>();
 	RobotDrive myRobot;
 	Talon rightDriveMotor;
 	Talon leftDriveMotor;
 	Talon intakeWheel;
 	Spark intakeTilt;
 	Spark winchTal;
-	Joystick driveGamepad;
-	Joystick guestStick;
+	Joystick driveLeftStick;
+	Joystick driveRightStick;
+	Joystick manipulatorStick;
 	Timer toggleButtonTimer;
 	Timer autoDriveTimer;
 	Timer winchTimer;
@@ -56,6 +60,7 @@ public class Robot extends IterativeRobot {
 	double defualtThrottle=1;
 	double guestThrottle=0.5;
 	double intake_Wheel_Speed = 1.0;
+	boolean use_Drive_Timer = true;
 
 	/**
 	 * This function is run when the robot is first started up and should be
@@ -71,8 +76,9 @@ public class Robot extends IterativeRobot {
 		intakeWheel = new Talon(2);
 		intakeTilt = new Spark(3);
 		winchTal = new Spark(4);
-		driveGamepad = new Joystick(0);
-		guestStick = new Joystick(1);
+		driveLeftStick = new Joystick(1);
+		driveRightStick = new Joystick(0);
+		manipulatorStick = new Joystick(2);
 		toggleButtonTimer = new Timer();
 		autoDriveTimer = new Timer();
 		winchTimer = new Timer();
@@ -95,6 +101,12 @@ public class Robot extends IterativeRobot {
 		turningButtonState=0;
 		turningButtonAngle=0;
 		currentTurningButton=0;
+		chooser.addDefault("Default Auto", autoNameDefault);
+		chooser.addObject("Low Bar", autoNameLowBar);
+		chooser.addObject("Moat or Rampart", autoNameMoatRampart);
+		chooser.addObject("Low Bar Score(Non Functional)", autoNameScore);
+		SmartDashboard.putData("Auto choices", chooser);
+		driveGyro.reset();
 		hanger.set(DoubleSolenoid.Value.kReverse);
 	}
 
@@ -111,10 +123,8 @@ public class Robot extends IterativeRobot {
 	 */
 	@Override
 	public void autonomousInit() {
-		/*autoSelected = chooser.getSelected();
-		// autoSelected = SmartDashboard.getString("Auto Selector",
-		// defaultAuto);
-		System.out.println("Auto selected: " + autoSelected);*/
+		autoSelected = chooser.getSelected();
+		System.out.println("Auto selected: " + autoSelected);
 	}
 
 	/**
@@ -122,15 +132,33 @@ public class Robot extends IterativeRobot {
 	 */
 	@Override
 	public void autonomousPeriodic() {
-	/*	switch (autoSelected) {
-		case customAuto:
-			// Put custom auto code here
-			break;
-		case defaultAuto:
-		default:
-			// Put default auto code here
-			break;
-		}*/
+		while (isAutonomous() && isEnabled())
+		{
+			if(autoSelected == autoNameLowBar){
+				/*myRobot.SetSafetyEnabled(false);
+				myRobot.Drive(-0.5, 1.0); 	// spin at half speed
+				Wait(2.0); 				//    for 2 seconds
+				myRobot.Drive(0.0, 0.0); 	// stop robot
+				*/
+				lowBarAutonomous();
+			}
+			else if (autoSelected == autoNameMoatRampart)
+			{
+				moatRampartAutonomous();
+			}
+			else if (autoSelected == autoNameScore)
+			{
+				lowBarScoreAutonomous();
+			}
+			else
+			{
+				//Default Auto goes here
+	//			myRobot.SetSafetyEnabled(false);
+	//			myRobot.Drive(0.0, 0.0); 	// stop robot
+				driveStraightAutonomous();
+			}
+			updateDashboard();
+		}
 	}
 
 	/**
@@ -138,27 +166,20 @@ public class Robot extends IterativeRobot {
 	 */
 	@Override
 	public void teleopPeriodic() {
-		while (isOperatorControl() && isDisabled())
-		{
-			if (driveGamepad.getRawButton(10))
-			{
-				guestDrive(guestThrottle);
-				guestIntakeControl(1,2);
-			}
-			else if (driveGamepad.getRawButton(6))
-			{
-				tankDrive(defualtThrottle);
-				intakeWheelControl(5,7);
-				cheval(2,4);
-				hangerPiston(1,3);
-			}
-			else
-			{
-				stopRobotDrive();
-				winchTal.setSpeed(0.0);
-				intakeWheel.set(0);
-			}
-		}
+		//myRobot.SetSafetyEnabled(true);
+				while (isOperatorControl() && isEnabled())
+				{
+					//if (turnButtons())
+					//{
+						tankDrive();
+					//}
+					intakeWheelControl(5,7);
+					winchControl();
+					ShooterControl();
+					tiltControl(3, 2);  //Using stick now..not buttons
+					updateDashboard();
+					hangerPiston(6,8);
+				}
 	}
 
 	/**
@@ -172,78 +193,160 @@ public class Robot extends IterativeRobot {
 		return Math.pow(joyInput,3);
 	}
 	//-1 is reverse and 1 is norm
-		void tankDrive(double defualtThrottle2)
+		void tankDrive()
 		{
-			double right = driveGamepad.getRawAxis(1);
-			double left = driveGamepad.getRawAxis(3);
-			double rightCorrection = ((right - left)/2)*(1-defualtThrottle2);
-			double leftCorrection = ((left - right)/2)*(1-defualtThrottle2);
-			right *=defualtThrottle2;
-			left *=defualtThrottle2;
-			setDriveMotors(right + rightCorrection, left + leftCorrection, driveGamepad.getRawButton(8), 1);
-		}
-		void guestDrive(double guestThrottle2)
-		{
-			double x = guestStick.getX();
-			double y = guestStick.getX()*guestThrottle2;
-			double right = y-x;
-			double left = y+x;
-			setDriveMotors(right, left, false, 1);
-		}
-
-		void setDrive(float right, float left, boolean reverse, float throttle)
-		{
-			rightPower=rightDriveMotor.get()/throttle; //will never be outside of -throttle to +throttle
-			leftPower=leftDriveMotor.get()/throttle;
-			double rightDirection;
-			double leftDirection;
-			if ((right-rightPower)==0)
+			toggleDriveDirection();
+			//float right = smoothJoyStick(driveRightStick.GetY());
+			//float left = smoothJoyStick(driveLeftStick.GetY());
+			double right = driveRightStick.getY();
+			double left = driveLeftStick.getY();
+//			leftDriveMotor.Set(left);
+//			rightDriveMotor.Set(-right);
+			if(!driveRightStick.getTrigger())
 			{
-				rightDirection = 1;
-				leftDirection = 1;
+				if (driveReverse)
+				{
+					leftDriveMotor.set(-right);
+					rightDriveMotor.set(left);
+				}
+				else
+				{
+					leftDriveMotor.set(left);
+					rightDriveMotor.set(-right);
+				}
+				isGyroResetTelop = false;
 			}
 			else
 			{
-				rightDirection = (right-rightPower)/Math.abs(right-rightPower); // -1 or 1 returened for back/forward
-				leftDirection = (left-leftPower)/Math.abs(left-leftPower);
+				if(isGyroResetTelop == false)
+				{
+					driveGyro.reset();
+					isGyroResetTelop = true;
+				}
+				if (driveReverse)
+				{
+					keepDriveStraight(driveRightStick.getY(), driveRightStick.getY(), 0);
+				}
+				else
+				{
+					keepDriveStraight(-driveRightStick.getY(), -driveRightStick.getY(), 0);
+				}
 			}
-			double rightDifference = Math.min(Math.abs(right-rightPower), maxSpeedChange);
-			double leftDifference = Math.min(Math.abs(left-leftPower), maxSpeedChange);
-			rightPower+=rightDifference*rightDirection;
-			leftPower+=leftDifference*leftDirection;
-			setDriveMotors(rightPower, leftPower, reverse, throttle);
 		}
-		void setDriveMotors(double rightPower2, double leftPower2, boolean reverse, float throttle)
+	/*
+		void setDrive(float right, float left, bool reverse)
 		{
 			if (reverse)
 			{
-				leftDriveMotor.set(leftPower2*throttle);
-				rightDriveMotor.set(-rightPower2*throttle);
+				leftDriveMotor.Set(-right);
+				rightDriveMotor.Set(left);
 			}
 			else
 			{
-				leftDriveMotor.set(-rightPower2*throttle);
-				rightDriveMotor.set(leftPower2*throttle);
+				leftDriveMotor.Set(left);
+				rightDriveMotor.Set(-right);
 			}
 		}
+	*/
 		void hangerPiston(int extend, int retract)
 		{
-			if (driveGamepad.getRawButton(extend))
+			if (manipulatorStick.getRawButton(extend))
 			{
 				hanger.set(DoubleSolenoid.Value.kForward);
 			}
-			else if (driveGamepad.getRawButton(retract))
+			else if (manipulatorStick.getRawButton(retract))
 			{
 				hanger.set(DoubleSolenoid.Value.kReverse);
 			}
 		}
+		void toggleDriveDirection()
+		{
+			if(driveLeftStick.getRawButton(2))
+			{
+				driveReverse=true;
+			}
+			else
+			{
+				driveReverse=false;
+			}
+		}
+		/*boolean turnButtons()
+		{
+			int direction = 1;
+			if (driveReverse==true)
+			{
+				direction=-1;
+			}
+			switch(turningButtonState)
+			{
+				case 0:
+					turningButtonAngle=0;
+					currentTurningButton=0;
+					if (driveRightStick.getRawButton(5))
+					{
+						driveGyro.reset();
+						turningButtonAngle=(-90*direction);
+						currentTurningButton=5;
+						turningButtonState++;
+					}
+					else if (driveRightStick.getRawButton(4))
+					{
+						driveGyro.reset();
+						turningButtonAngle=(90*direction);
+						currentTurningButton=4;
+						turningButtonState++;
+					}
+					else if (driveRightStick.getRawButton(2))
+					{
+						driveGyro.reset();
+						turningButtonAngle=(180*direction);
+						currentTurningButton=2;
+						turningButtonState++;
+					}
+					return true;
+				case 1:
+					if (!driveRightStick.getRawButton(currentTurningButton) || turnGyro(turningButtonAngle))
+					{
+						turningButtonState++;
+					}
+					return false;
+				case 2:
+					if (!driveRightStick.getRawButton(currentTurningButton))
+					{
+						turningButtonState=0;
+					}
+					return false;
+				default:
+					turningButtonState=0;
+			}
+		}*/
+		double calculateWallDistance(boolean averaged)
+		{
+			double rawVoltage;
+			double crateDistance;
+
+			if(averaged)
+				rawVoltage = (double)(wallDistanceSensor.getAverageVoltage());
+			else
+				rawVoltage = (double)(wallDistanceSensor.getVoltage());
+
+			//MB1013
+			//double VFiveMM = 0.0048359375;  //((4.952 / 5120) * 5);
+			//crateDistance = ((rawVoltage * 5 * 0.0393) / VFiveMM);  //Units inch
+
+			//MB1030
+			double VFiveMM = 0.009671875;
+			crateDistance = rawVoltage / VFiveMM;
+
+			return crateDistance;
+		}
 		void intakeWheelControl(int mIntakeInButton, int mIntakeOutButton)
 		{
-			if (driveGamepad.getRawButton(mIntakeInButton))
+			if (manipulatorStick.getRawButton(mIntakeInButton) || driveLeftStick.getTrigger())
 			{
 				intakeWheel.set(-intake_Wheel_Speed);
 			}
-			else if (driveGamepad.getRawButton(mIntakeOutButton))
+			else if (manipulatorStick.getRawButton(mIntakeOutButton))
 			{
 				intakeWheel.set(intake_Wheel_Speed);
 			}
@@ -252,34 +355,95 @@ public class Robot extends IterativeRobot {
 				intakeWheel.set(0);
 			}
 		}
-		void guestIntakeControl(int mIntakeInButton, int mIntakeOutButton)
+
+		void tiltControl(int up, int down)
 		{
-			if (guestStick.getRawButton(mIntakeInButton))
+			/*if (manipulatorStick.GetRawButton(up))
 			{
-				intakeWheel.set(-intake_Wheel_Speed);
+				intakeTilt.Set(0.3);
 			}
-			else if (guestStick.getRawButton(mIntakeOutButton))
+			else if (manipulatorStick.GetRawButton(down))
 			{
-				intakeWheel.set(intake_Wheel_Speed);
+				intakeTilt.Set(-0.1);
 			}
 			else
 			{
-				intakeWheel.set(0);
-			}
+				intakeTilt.Set(0);
+			}*/
+			intakeTilt.set(manipulatorStick.getY());
 		}
-		void cheval(int upButton, int downButton)
+
+		void winchControl()
 		{
-			if (driveGamepad.getRawButton(upButton) && shootLimitSwitch.get())
+			//pulls back winc
+			if (manipulatorStick.getRawButton(2) && !winchRetracted)
 			{
+				winchTimer.start();
+
+				if(winchTimer.get() > 0.025)
+				{
+					if(!shootLimitSwitch.get())
+					{
+						winchRetracted = true;
+					}
+				}
 				winchTal.setSpeed(0.5);
 			}
-			else if (driveGamepad.getRawButton(downButton))
+			else
 			{
-				winchTal.setSpeed(-0.5);
+				winchTimer.reset();
+				if(!manipulatorStick.getRawButton(2))
+				{
+					winchRetracted = false;
+				}
+				winchTal.setSpeed(0.0);
+			}
+		}
+
+		void ShootBall()
+		{
+			/*
+			if(!shootTimerStarted)
+			{
+				shootTimer.Start();
+				shootTimerStarted = true;
 			}
 			else
 			{
+				if(shootTimer.Get() > 0.3)
+				{
+					//Release winch
+					if(shootTimer.Get() <= 0.4)
+						winchTal.SetSpeed(1.0);
+					else
+						winchTal.SetSpeed(0.0);
+				}
+			}
+			*/
+			winchTal.setSpeed(-0.75);
+		}
+
+		void StopShooting()
+		{
+			//Stop winch
+			if(!manipulatorStick.getRawButton(2))
 				winchTal.setSpeed(0.0);
+
+			shootTimer.stop();
+			shootTimer.reset();
+			shootTimerStarted = false;
+		}
+
+		void ShooterControl()
+		{
+			//Shoots the ball
+			if (manipulatorStick.getRawButton(4))
+			{
+				ShootBall();
+			}
+			else
+			{
+				StopShooting();
 			}
 		}
 
@@ -287,6 +451,284 @@ public class Robot extends IterativeRobot {
 		{
 			leftDriveMotor.set(0.0);
 			rightDriveMotor.set(0.0);
+		}
+
+		void resetDrive(boolean use_Drive_Timer2)
+		{
+			if(use_Drive_Timer2)
+			{
+				autoDriveTimer.reset();
+				autoDriveTimer.start();
+				driveGyro.reset();
+			}
+			else
+			{
+				//leftDriveEncoder.Reset();
+				//rightDriveEncoder.Reset();
+			}
+		}
+
+		void keepDriveStraight(double d, double e, float targetAngle)
+		{
+			double error = 0, correctionFactor;
+			error = targetAngle - driveGyro.getAngle();
+			correctionFactor = (error/75.0);
+
+			if(targetAngle > (driveGyro.getAngle() - 0.5) || targetAngle < (driveGyro.getAngle() + 0.5))
+			{
+				leftDriveMotor.set((-d) + correctionFactor);
+				rightDriveMotor.set(e + correctionFactor);
+			}
+			else
+			{
+				leftDriveMotor.set(-d);
+				rightDriveMotor.set(e);
+			}
+		}
+
+		boolean turnGyro(float rAngle)
+		{
+			double error = 0;
+			//Positive gyro angle means turning left
+			if(rAngle < driveGyro.getAngle())
+			{
+				error = Math.abs(rAngle) - driveGyro.getAngle();
+				if(driveGyro.getAngle() <= Math.abs(rAngle) && Math.abs(error) > 2.0)
+				{
+					//turn left
+					leftDriveMotor.set((error/45) + 0.2); //0.8  div 140
+					rightDriveMotor.set((error/45) + 0.2); //0.8
+				}
+				else
+				{
+					stopRobotDrive();
+					return true;
+				}
+			}
+			else if(rAngle > driveGyro.getAngle())
+			{
+				error = -rAngle - driveGyro.getAngle();
+				if(driveGyro.getAngle() >= -rAngle && Math.abs(error) > 2.0)
+				{
+					//turn right
+					leftDriveMotor.set((error/45) - 0.2); //-0.8
+					rightDriveMotor.set((error/45) - 0.2); //-0.8
+				}
+				else
+				{
+					stopRobotDrive();
+					return true;
+				}
+			}
+			else
+			{
+				stopRobotDrive();
+				return true;
+			}
+
+			return false;
+		}
+
+		//Prior to calling this function you must call resetDrive1
+		boolean autoDriveRobot(double d, double e, double f, float distanceInch, boolean isTimerBased)
+		{
+			if(isTimerBased)
+			{
+				if(autoDriveTimer.get() <= f)
+				{
+					//leftDriveMotor.Set(-velocityLeft);
+					//rightDriveMotor.Set(velocityRight);
+					keepDriveStraight(d, e, 0);
+				}
+				else
+				{
+					stopRobotDrive();
+					return true;
+				}
+			}
+			else
+			{
+				/*if(fabs(convertDriveTicksToInches(rightDriveEncoder.GetRaw())) < fabs(distanceInch))
+				{
+					leftDriveMotor.Set(-velocityLeft);
+					rightDriveMotor.Set(velocityRight);
+				}
+				else
+				{
+					stopRobotDrive();
+					return true;
+				}*/
+			}
+			return false;
+		}
+
+		void driveStraightAutonomous()
+		{
+			switch(autoState)
+			{
+				case 0:
+					resetDrive(use_Drive_Timer);
+					intakeTilt.set(-0.4);
+					//wait( 1.0);
+					autoState++;
+					break;
+				case 1:
+					intakeTilt.set(0.0);
+					resetDrive(use_Drive_Timer);
+					intakeWheel.set(-1);
+					//wait( 0.5);
+					autoState++;
+					break;
+				case 2:
+					intakeWheel.set(0.0);
+					if(autoDriveRobot(0.6, 0.6, 1.0, 0, use_Drive_Timer)) //1.0 sec
+					{
+						resetDrive(use_Drive_Timer);
+						autoState++;
+					}
+					break;
+
+				case 3:
+					if(autoDriveRobot(0.85, 0.85, 2.25, 0, use_Drive_Timer))
+						autoState++;
+					break;
+
+				case 4:
+					stopRobotDrive();
+					break;
+				default:
+					stopRobotDrive();
+					break;
+			}
+		}
+		void moatRampartAutonomous()
+		{
+			switch(autoState)
+			{
+				case 0:
+					resetDrive(use_Drive_Timer);
+					intakeTilt.set(-0.4);
+					//wait(1.0);
+					autoState++;
+					break;
+				case 1:
+					intakeTilt.set(0.0);
+					resetDrive(use_Drive_Timer);
+					intakeWheel.set(-1);
+					//wait(0.5);
+					autoState++;
+					break;
+				case 2:
+					intakeWheel.set(0.0);
+					if(autoDriveRobot(0.6, 0.6, 1.0, 0, use_Drive_Timer)) //1.0 sec
+					{
+						resetDrive(use_Drive_Timer);
+						autoState++;
+					}
+					break;
+
+				case 3:
+					if(autoDriveRobot(0.85, 0.85, 2.5, 0, use_Drive_Timer))
+						autoState++;
+					break;
+
+				case 4:
+					stopRobotDrive();
+					break;
+				default:
+					stopRobotDrive();
+					break;
+			}
+		}
+		void lowBarScoreAutonomous()
+		{
+			//float wallTurnDistance;
+			switch(autoState)
+			{
+				case 0:
+					resetDrive(use_Drive_Timer);
+					intakeTilt.set(-0.4);
+					//wait(1.0);
+					autoState++;
+					break;
+				case 1:
+					intakeTilt.set(0.0);
+					resetDrive(use_Drive_Timer);
+					intakeWheel.set(-1);
+					//wait(0.5);
+					autoState++;
+					break;
+				case 2:
+					intakeWheel.set(0.0);
+					if(autoDriveRobot(0.5, 0.5, 1.0, 0, use_Drive_Timer))
+					{
+						resetDrive(use_Drive_Timer);
+						autoState++;
+					}
+					break;
+
+				case 3:
+					if(autoDriveRobot(0.5, 0.5, 2.5, 0, use_Drive_Timer))
+					{
+						resetDrive(use_Drive_Timer);
+						autoState++;
+					}
+					break;
+				//case 4:
+				//	if (calculateWallDistance(true)>wallTurnDistance){}
+				//	break;
+				case 999:
+					stopRobotDrive();
+					break;
+				default:
+					stopRobotDrive();
+					break;
+			}
+		}
+
+		void lowBarAutonomous()
+		{
+			switch(autoState)
+			{
+				case 0:
+					resetDrive(use_Drive_Timer);
+					intakeTilt.set(-0.4);
+					//wait(1.0);
+					autoState++;
+					break;
+				case 1:
+					intakeTilt.set(0.0);
+					resetDrive(use_Drive_Timer);
+					intakeWheel.set(-1);
+					//wait(0.5);
+					autoState++;
+					break;
+				case 2:
+					intakeWheel.set(0.0);
+					if(autoDriveRobot(0.6, 0.6, 1.0, 0, use_Drive_Timer))
+					{
+						resetDrive(use_Drive_Timer);
+						autoState++;
+					}
+					break;
+
+				case 3:
+					if(autoDriveRobot(0.6, 0.6, 2.5, 0, use_Drive_Timer))
+						autoState++;
+					break;
+
+				case 4:
+					stopRobotDrive();
+					break;
+				default:
+					stopRobotDrive();
+					break;
+			}
+		}		
+		void updateDashboard()
+		{
+			SmartDashboard.putNumber("Wall Distance: ", calculateWallDistance(false));
+			SmartDashboard.putNumber("Gyro Reading: ", driveGyro.getAngle());
 		}
 }
 
