@@ -6,18 +6,18 @@ public class PDP extends edu.wpi.first.wpilibj.PowerDistributionPanel {
 	}
 	
 	double current(int x){
-		return this.getCurrent(x);
+		return super.getCurrent(x);
 	}
 	double voltage(){
-		return this.getVoltage();
+		return super.getVoltage();
 	}
 	double totalCurrent(){
-		return this.getTotalCurrent();
+		return super.getTotalCurrent();
 	}
 	double totalPower(){
-		return this.getTotalPower();
+		return super.getTotalPower();
 	}
 	double totalEnergy(){
-		return this.getTotalEnergy();
+		return super.getTotalEnergy();
 	}
 }
