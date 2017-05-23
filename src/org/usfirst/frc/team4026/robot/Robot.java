@@ -5,12 +5,14 @@ import edu.wpi.first.wpilibj.AnalogInput;
 import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.DoubleSolenoid;
+import edu.wpi.first.wpilibj.DoubleSolenoid.Value;
 import edu.wpi.first.wpilibj.IterativeRobot;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.RobotDrive;
 import edu.wpi.first.wpilibj.Spark;
 import edu.wpi.first.wpilibj.Talon;
 import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.livewindow.LiveWindow;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 /**
@@ -42,6 +44,8 @@ public class Robot extends IterativeRobot {
 	AnalogInput wallDistanceSensor;
 	DoubleSolenoid hanger;
 	Compressor compressorPointer;
+	//PowerDistributionPanel pdp;
+	PDP pdp;
 	int autoState;
 	boolean winchRetracted;
 	boolean shootTimerStarted;
@@ -95,7 +99,7 @@ public class Robot extends IterativeRobot {
 		turningButtonState=0;
 		turningButtonAngle=0;
 		currentTurningButton=0;
-		hanger.set(DoubleSolenoid.Value.kReverse);
+		hanger.set(Value.kReverse);
 	}
 
 	/**
@@ -115,6 +119,28 @@ public class Robot extends IterativeRobot {
 		// autoSelected = SmartDashboard.getString("Auto Selector",
 		// defaultAuto);
 		System.out.println("Auto selected: " + autoSelected);*/
+	}
+	void updateDashboard(){
+		SmartDashboard.putNumber("Current for Channel 0", pdp.current(0));
+		SmartDashboard.putNumber("Current for Channel 1", pdp.current(1));
+		SmartDashboard.putNumber("current for Channel 2", pdp.current(2));
+		SmartDashboard.putNumber("Current for Channel 3", pdp.current(3));
+		SmartDashboard.putNumber("Current for Channel 4", pdp.current(4));
+		SmartDashboard.putNumber("Current for Channel 5", pdp.current(5));
+		SmartDashboard.putNumber("Current for Channel 6", pdp.current(6));
+		SmartDashboard.putNumber("Current for Channel 7", pdp.current(7));
+		SmartDashboard.putNumber("Current for Channel 8", pdp.current(8));
+		SmartDashboard.putNumber("Current for Channel 9", pdp.current(9));
+		SmartDashboard.putNumber("Current for Channel 10", pdp.current(10));
+		SmartDashboard.putNumber("Current for Channel 11", pdp.current(11));
+		SmartDashboard.putNumber("Current for Channel 12", pdp.current(12));
+		SmartDashboard.putNumber("Current for Channel 13", pdp.current(13));
+		SmartDashboard.putNumber("Current for Channel 14", pdp.current(14));
+		SmartDashboard.putNumber("Current for Channel 15", pdp.current(15));
+		SmartDashboard.putNumber("PDP Total Current:", pdp.totalCurrent());
+		SmartDashboard.putNumber("PDP Total Power:", pdp.totalPower());
+		SmartDashboard.putNumber("PDP Total Energy:", pdp.totalEnergy());
+		SmartDashboard.putNumber("PDP Input Voltage:", pdp.voltage());
 	}
 
 	/**
@@ -138,25 +164,28 @@ public class Robot extends IterativeRobot {
 	 */
 	@Override
 	public void teleopPeriodic() {
-		while (isOperatorControl() && isDisabled())
+		while (isOperatorControl())
 		{
 			if (driveGamepad.getRawButton(10))
 			{
 				guestDrive(guestThrottle);
 				guestIntakeControl(1,2);
+				updateDashboard();
 			}
-			else if (driveGamepad.getRawButton(6))
+			else if (driveGamepad.getRawButton(8))
 			{
 				tankDrive(defualtThrottle);
 				intakeWheelControl(5,7);
 				cheval(2,4);
 				hangerPiston(1,3);
+				updateDashboard();
 			}
 			else
 			{
 				stopRobotDrive();
 				winchTal.setSpeed(0.0);
 				intakeWheel.set(0);
+				updateDashboard();
 			}
 		}
 	}
@@ -166,6 +195,7 @@ public class Robot extends IterativeRobot {
 	 */
 	@Override
 	public void testPeriodic() {
+		LiveWindow.run();
 	}
 	double smoothJoyStick(float joyInput)
 	{
@@ -174,8 +204,8 @@ public class Robot extends IterativeRobot {
 	//-1 is reverse and 1 is norm
 		void tankDrive(double defualtThrottle2)
 		{
-			double right = driveGamepad.getRawAxis(1);
-			double left = driveGamepad.getRawAxis(3);
+			double right = driveGamepad.getY();
+			double left  = driveGamepad.getThrottle();
 			double rightCorrection = ((right - left)/2)*(1-defualtThrottle2);
 			double leftCorrection = ((left - right)/2)*(1-defualtThrottle2);
 			right *=defualtThrottle2;
@@ -288,6 +318,6 @@ public class Robot extends IterativeRobot {
 			leftDriveMotor.set(0.0);
 			rightDriveMotor.set(0.0);
 		}
+		
 }
-
 
